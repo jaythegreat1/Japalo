@@ -24,6 +24,7 @@ from highrise.models import AnchorPosition, Error, Position, SessionMetadata
 
 from . import personality
 from .commands.admin_commands import AdminCommandsMixin
+from .commands.ai_commands import AICommandsMixin
 from .commands.economy_commands import EconomyCommandsMixin
 from .commands.emote_commands import EmoteCommandsMixin
 from .commands.game_commands import GameCommandsMixin
@@ -118,6 +119,7 @@ STOP_COMMANDS = {"stop", "!stop"}
 
 class HighriseRoomBot(
     BaseBot,
+    AICommandsMixin,
     EmoteCommandsMixin,
     GameCommandsMixin,
     EconomyCommandsMixin,
@@ -160,6 +162,9 @@ class HighriseRoomBot(
         self._frozen_users: dict[str, Position] = {}
         self._last_auto_spend = 0.0
 
+        # AI: talking to "Japalo ..." and letting the AI act (ai_commands.py).
+        self._init_ai()
+
     # ------------------------------------------------------------------
     # Personality
     # ------------------------------------------------------------------
@@ -187,6 +192,7 @@ class HighriseRoomBot(
         for key, (_type, default) in SETTINGS_SCHEMA.items():
             self._settings[key] = stored_settings.get(key, default)
         logger.info("Bot started in room owned by %s", self.room_owner_id)
+        await self._ai_on_start(session_metadata)
         text = self._voice(
             personality.STARTUP_MESSAGES,
             "Bot online. Type !help for emotes, games, and room commands.",
@@ -195,6 +201,7 @@ class HighriseRoomBot(
 
     async def on_user_leave(self, user: User) -> None:
         await self.emote_loops.stop(user.id)
+        self._ai_user_left(user)
         self._frozen_users.pop(user.id, None)
         if self._personality_on():
             await self.highrise.chat(random_leave_message(user.username))
@@ -241,6 +248,8 @@ class HighriseRoomBot(
     async def on_user_move(
         self, user: User, destination: Position | AnchorPosition
     ) -> None:
+        if user.id != getattr(self.highrise, "my_id", None):
+            self._ai_track_move(user, destination)
         frozen_at = self._frozen_users.get(user.id)
         if frozen_at is None:
             return
@@ -310,6 +319,13 @@ class HighriseRoomBot(
                 await self._run_emote_number(user, number)
             return
 
+        # "Japalo ..." is for the AI. Checked before shlex, which would choke
+        # on ordinary apostrophes ("Japalo what's up?").
+        ai_text = self._ai_addressed(text)
+        if ai_text is not None:
+            await self._handle_ai_message(user, ai_text)
+            return
+
         try:
             tokens = shlex.split(text)
         except ValueError:
@@ -329,6 +345,8 @@ class HighriseRoomBot(
             return
 
         if command in STOP_COMMANDS:
+            if self._ai_stop_following_for(user):
+                await self.highrise.send_whisper(user.id, "Stopped following you.")
             await self._stop_emote(user)
             return
         if command in GAME_START_COMMANDS:
@@ -351,6 +369,16 @@ class HighriseRoomBot(
         handler_name = COMMAND_TABLE.get(command)
         if handler_name is not None:
             await getattr(self, handler_name)(user, args)
+
+    async def on_whisper(self, user: User, message: str) -> None:
+        """Whispers go straight to the AI (the bot's name is optional there)."""
+        if user.id == getattr(self.highrise, "my_id", None):
+            return
+        text = message.strip()
+        if not text:
+            return
+        ai_text = self._ai_addressed(text)
+        await self._handle_ai_message(user, text if ai_text is None else ai_text, whisper=True)
 
     # ------------------------------------------------------------------
     # Shared utility (used across multiple command mixins)

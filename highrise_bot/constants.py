@@ -68,4 +68,7 @@ SETTINGS_SCHEMA: dict[str, tuple[type, str]] = {
     # bot). Room devs who want a quieter room can flip this without losing
     # any functionality.
     "personality": (str, "on"),
+    # AI chat ("Japalo <anything>"). "off" keeps the typed actions (emote,
+    # follow, stop, come here) but stops sending questions to the AI.
+    "ai": (str, "on"),
 }

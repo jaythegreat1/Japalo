@@ -61,6 +61,62 @@ Highrise bot's own websocket reconnect logic, which is already handled.
 If you're instead on a paid Reserved-VM or Autoscale Replit deployment, you
 don't need step 4 — deployments stay on without an uptime monitor.
 
+## Talk to Japalo (AI)
+
+Any chat message that **starts with "Japalo"** goes to the AI; everything
+else in the room is left alone. Whispers to the bot go to the AI too, and
+are answered privately.
+
+- `Japalo <anything>` — chat with the AI. It can also act in the room:
+  `Japalo come dance with me` makes the bot and you dance, `Japalo wave at
+  me and come over here` sends a wave and walks over.
+- `Japalo emote 65`, `Japalo i want to do the emote number 65`,
+  `Japalo emote moonwalk` — loop that emote (same numbers as `!emotelist`;
+  `stop` ends it).
+- `Japalo follow me` — the bot walks after you until `Japalo stop` (or plain
+  `stop`), or until you leave the room.
+- `Japalo come here`, `Japalo send heart to @name`.
+- `Japalo status / reset / facts`; staff: `Japalo learn <fact>`,
+  `Japalo forget <n>`, `Japalo model <name>`, `Japalo follow @name`,
+  `Japalo emote 65 on @name`.
+
+The common requests above are understood instantly without the AI. Anything
+else goes to the AI, which answers with a small JSON plan of actions; every
+planned action goes through the same checks as the typed commands
+(emoting others needs staff or 100g VIP, moving to or following others
+needs staff). `!config set ai off` turns off AI chat but keeps the typed
+actions. Code: `highrise_bot/ai/` and `highrise_bot/commands/ai_commands.py`.
+
+### AI setup (OmniRoute)
+
+The AI's brain is [OmniRoute](https://github.com/diegosouzapw/OmniRoute), a
+free AI gateway with one OpenAI-style endpoint for many providers. Run it on
+the same machine as the bot (Node **22.22.2+** or 24; on older Node, npm
+silently installs an outdated 3.8.48 whose free providers are gone):
+
+```
+npm install -g omniroute
+omniroute          # dashboard + API on http://localhost:20128
+```
+
+Optional secrets (all have defaults):
+
+| Key | Default | What it does |
+|---|---|---|
+| `OMNIROUTE_URL` | `http://localhost:20128/v1` | Where OmniRoute listens |
+| `OMNIROUTE_API_KEY` | *(empty)* | OmniRoute key, if you turned on required API keys |
+| `OMNIROUTE_MODEL` | `auto` | Main model |
+| `OMNIROUTE_FALLBACK_MODELS` | *(empty)* | Models tried in order when the main one fails, e.g. `ddgw/gpt-5.4-mini,ddgw/gpt-5.6-luna,ddgw/gpt-5-mini` for free keyless DuckDuckGo |
+| `OMNIROUTE_MIN_INTERVAL` | `4` | Seconds between AI requests (free providers rate-limit bursts) |
+| `OMNIROUTE_RATE_LIMIT_WAIT` | `15` | Seconds to wait after a rate limit before retrying |
+| `BOT_NAME` | `Japalo` | The word a message must start with |
+
+Zero-key `auto` cannot answer today (its only keyless target, OpenCode Free,
+blocks third-party apps), so set fallback models or connect a provider with
+your own free key (Groq, Google AI Studio, OpenRouter) in the OmniRoute
+dashboard. If OmniRoute is down, the bot keeps running and replies that its
+brain is taking a nap; everything else works as before.
+
 ## Persistence, settings, and alerts (Phase 0)
 
 **Data survives restarts now.** Warnings, minigame scores, room settings,

@@ -27,6 +27,22 @@ HELP_CATEGORIES: dict[str, tuple[str, bool, list[str]]] = {
             "(VIP tippers at 100g+ lifetime, or staff)",
         ],
     ),
+    "ai": (
+        "Talk to Japalo (AI)",
+        False,
+        [
+            "Start any message with Japalo — other chat is ignored by the AI",
+            "Japalo <anything> — chat with the AI; it can also act, e.g. "
+            "'Japalo come dance with me'",
+            "Japalo emote 65 / Japalo emote moonwalk — loop an emote (stop to end)",
+            "Japalo follow me / Japalo stop / Japalo come here",
+            "Japalo send heart to @name — reactions: clap, heart, thumbs, wave, wink",
+            "Japalo status / reset / facts — AI status, forget our chat, learned facts",
+            "Staff: Japalo learn <fact>, Japalo forget <n>, Japalo model <name>, "
+            "Japalo follow @name, Japalo emote 65 on @name",
+            "Whisper the bot to chat privately",
+        ],
+    ),
     "games": (
         "Games",
         False,
@@ -79,6 +95,8 @@ HELP_CATEGORIES: dict[str, tuple[str, bool, list[str]]] = {
 }
 
 CATEGORY_ALIASES: dict[str, str] = {
+    "japalo": "ai",
+    "chat": "ai",
     "emote": "emotes",
     "game": "games",
     "tip": "economy",
