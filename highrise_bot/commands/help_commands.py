@@ -25,6 +25,9 @@ HELP_CATEGORIES: dict[str, tuple[str, bool, list[str]]] = {
             "stop — stop your current emote loop",
             "!emote @name <number> — play an emote on someone else "
             "(VIP tippers at 100g+ lifetime, or staff)",
+            "!punch @name — you punch, they fall",
+            "!slap @name — you slap, they fall",
+            "!explode @name — they explode with the Boo emote",
         ],
     ),
     "ai": (

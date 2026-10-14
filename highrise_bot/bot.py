@@ -29,14 +29,22 @@ from .commands.economy_commands import EconomyCommandsMixin
 from .commands.emote_commands import EmoteCommandsMixin
 from .commands.game_commands import GameCommandsMixin
 from .commands.help_commands import HelpMixin
+from .commands.interaction_commands import InteractionCommandsMixin
 from .commands.moderation_commands import ModerationCommandsMixin
-from .constants import CATALOG_PATH, DB_PATH, SETTINGS_SCHEMA, WORD_FILTER_PATH
+from .constants import (
+    CATALOG_PATH,
+    DB_PATH,
+    INTERACTIONS_PATH,
+    SETTINGS_SCHEMA,
+    WORD_FILTER_PATH,
+)
 from .emote_loop import EmoteLoopManager
 from .emotes import load_catalog
 from .games.emoji_riddle import EmojiRiddleGame
 from .games.guess_number import GuessNumberGame
 from .games.math_blitz import MathBlitzGame
 from .games.scramble import ScrambleGame
+from .interactions import load_interactions
 from .logging_config import get_logger
 from .messages import (
     plain_join_message,
@@ -106,6 +114,9 @@ ACTION_COMMANDS: dict[str, tuple[str, str]] = {
     "!unban": ("_handle_moderation", "unban"),
     "!freeze": ("_handle_freeze", "freeze"),
     "!unfreeze": ("_handle_freeze", "unfreeze"),
+    "!punch": ("_handle_interaction", "punch"),
+    "!slap": ("_handle_interaction", "slap"),
+    "!explode": ("_handle_interaction", "explode"),
 }
 
 # command -> grant (True) or revoke (False) moderator.
@@ -121,6 +132,7 @@ class HighriseRoomBot(
     BaseBot,
     AICommandsMixin,
     EmoteCommandsMixin,
+    InteractionCommandsMixin,
     GameCommandsMixin,
     EconomyCommandsMixin,
     ModerationCommandsMixin,
@@ -161,6 +173,10 @@ class HighriseRoomBot(
         self._join_times: list[float] = []
         self._frozen_users: dict[str, Position] = {}
         self._last_auto_spend = 0.0
+
+        # !punch / !slap / !explode (interaction_commands.py).
+        self.interactions = load_interactions(INTERACTIONS_PATH)
+        self._interaction_cooldowns: dict[str, float] = {}
 
         # AI: talking to "Japalo ..." and letting the AI act (ai_commands.py).
         self._init_ai()

@@ -16,6 +16,9 @@ WORD_FILTER_PATH = ROOT / os.environ.get(
     "HIGHRISE_WORD_FILTER", "config/moderation_words.json"
 )
 DB_PATH = ROOT / os.environ.get("HIGHRISE_BOT_DB", "data/bot.db")
+INTERACTIONS_PATH = ROOT / os.environ.get(
+    "HIGHRISE_INTERACTIONS", "config/interactions.json"
+)
 
 GAME_NAMES: dict[str, str] = {
     "trivia": "Trivia",
@@ -71,4 +74,6 @@ SETTINGS_SCHEMA: dict[str, tuple[type, str]] = {
     # AI chat ("Japalo <anything>"). "off" keeps the typed actions (emote,
     # follow, stop, come here) but stops sending questions to the AI.
     "ai": (str, "on"),
+    # Per-player wait between !punch / !slap / !explode.
+    "interaction_cooldown_seconds": (float, "8.0"),
 }

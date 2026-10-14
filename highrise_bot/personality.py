@@ -247,6 +247,29 @@ EMOTE_LOOP_OTHER_MESSAGES: tuple[str, ...] = (
 )
 
 # ---------------------------------------------------------------------------
+# Interactions (!punch / !slap / !explode)
+# ---------------------------------------------------------------------------
+
+PUNCH_MESSAGES: tuple[str, ...] = (
+    "POW! {attacker} just knocked {target} off their feet. 👊",
+    "{attacker} threw hands and {target} hit the floor. Ref? REF?",
+    "One punch. {target} is down. {attacker} didn't even break a sweat.",
+    "{target} has been punched by {attacker}. Thoughts and prayers.",
+)
+SLAP_MESSAGES: tuple[str, ...] = (
+    "SMACK! {attacker} slapped {target} into next week. 🖐️",
+    "{attacker} delivered a slap so loud the room went quiet. Sorry, {target}.",
+    "{target} just got slapped by {attacker}. The disrespect is immaculate.",
+    "That slap from {attacker} had {target}'s whole family feeling it.",
+)
+EXPLODE_MESSAGES: tuple[str, ...] = (
+    "💥 {attacker} made {target} explode. BOO!",
+    "{target} just went off like a firework. Blame {attacker}. 👻",
+    "Kaboom-adjacent: {attacker} detonated {target}. BOO!",
+    "{attacker} pressed the big red button on {target}. BOO! 💥",
+)
+
+# ---------------------------------------------------------------------------
 # Config / help
 # ---------------------------------------------------------------------------
 

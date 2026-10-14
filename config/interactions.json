@@ -1,0 +1,8 @@
+{
+  "falls": ["emote-fail1", "emote-death2", "emote-deathdrop", "emote-fail2", "emote-fail3"],
+  "interactions": {
+    "punch": {"actor": ["emoji-punch", "emote-superpunch"], "impact_delay_seconds": 0.8},
+    "slap": {"actor": ["emote-slap"], "impact_delay_seconds": 0.6},
+    "explode": {"actor": [], "target": ["emote-boo"], "impact_delay_seconds": 0}
+  }
+}

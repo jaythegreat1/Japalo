@@ -10,6 +10,7 @@ five files, each owning one slice of the bot's behavior:
   moderation_commands.py  warnings, kick/ban/mute, freeze, mod grants
   admin_commands.py       !config settings storage + cooldown gate
   help_commands.py        !help
+  interaction_commands.py !punch / !slap / !explode two-player emotes
   ai_commands.py          "Japalo ..." AI chat + AI-driven actions (follow, emotes, ...)
 
 Each Mixin only calls methods it owns plus a small shared surface from the
