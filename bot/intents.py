@@ -23,8 +23,11 @@ _PATTERNS: list[tuple[re.Pattern, str]] = [
         r"(?:the\s+|an?\s+)?(?:emote|dance)?\s*(?:number|no\.?|#)?\s*(?P<emote>\d{1,3})" + _TARGET + r"\W*$"
     ), "emote"),
     (re.compile(r"^(?:please\s+)?make\s+@?(?P<who>[\w.]+)\s+(?:do\s+)?(?:emote\s+)?(?:number\s+|#)?(?P<emote>\d{1,3})\W*$"), "emote"),
-    # "emote macarena", "do the macarena"
-    (re.compile(r"^(?:please\s+)?(?:do|play)?\s*(?:the\s+)?emote\s+(?P<emote>[a-z][\w-]*)" + _TARGET + r"\W*$"), "emote"),
+    # "emote macarena", "emote let's go shopping on @amy" (names can have spaces)
+    (re.compile(
+        r"^(?:please\s+)?(?:do|play)?\s*(?:the\s+)?emote\s+(?P<emote>[a-z][\w' -]*?)"
+        r"(?:\s+(?:on|for|with)\s+@?(?P<who>[\w.]+))?\W*$"
+    ), "emote"),
     # "send heart to amy", "react heart"
     (re.compile(r"^(?:please\s+)?(?:send|react|give)\s+(?:a\s+)?(?P<reaction>clap|heart|thumbs|wave|wink)" + _TARGET + r"\W*$"), "react"),
 ]

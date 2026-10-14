@@ -78,11 +78,14 @@ async def make_bot(tmp_path, url="http://127.0.0.1:9/v1"):
     return bot
 
 
-def test_emote_book_lookup():
+def test_emote_book_matches_main_bot_numbering():
     book = EmoteBook.load()
-    assert book.find(19).id == "dance-macarena"
-    assert book.find("macarena").number == 19
-    assert book.find("#19") == book.find("dance-macarena")
+    assert len(book.emotes) == 265
+    assert book.find(1).id == "idle-enthusiastic"
+    assert book.find(65).id == "idle-sad"                 # "Pouty Face", same as the main Japalo bot
+    assert book.find(265).id == "emote-bloomify-pose3"
+    assert book.find("Let's Go Shopping").id == "dance-shoppingcart"
+    assert book.find("lets go shopping") == book.find("dance-shoppingcart") == book.find("#3")
     assert book.find(0) is None and book.find(9999) is None
 
 
@@ -92,6 +95,7 @@ def test_emote_book_lookup():
     ("do 12 on @zed", {"type": "emote", "emote": "12", "target": "zed"}),
     ("make zed do 7", {"type": "emote", "emote": "7", "target": "zed"}),
     ("emote macarena", {"type": "emote", "emote": "macarena", "target": "me"}),
+    ("emote let's go shopping on @zed", {"type": "emote", "emote": "let's go shopping", "target": "zed"}),
     ("follow me", {"type": "follow", "target": "me"}),
     ("Follow @Amy!", {"type": "follow", "target": "amy"}),
     ("stop", {"type": "stop"}),
@@ -195,15 +199,15 @@ async def test_ai_plan_runs_actions(tmp_path, ai):
     bot = await make_bot(tmp_path, ai["url"])
     hr = bot.highrise
     ai["reply"] = json.dumps({"say": "Let's dance!", "actions": [
-        {"type": "emote", "emote": "macarena", "target": "bot"},
-        {"type": "emote", "emote": 19, "target": "me"},
+        {"type": "emote", "emote": "Ring on It", "target": "bot"},
+        {"type": "emote", "emote": 100, "target": "me"},
         {"type": "emote", "emote": 1, "target": "zed"},   # not allowed for amy: refused
     ]})
     await bot.on_chat(AMY, "Japalo come dance with me")
-    assert hr.emotes == [("dance-macarena", None), ("dance-macarena", "u1")]
+    assert hr.emotes == [("dance-singleladies", None), ("dance-singleladies", "u1")]
     assert hr.chats[-1].startswith("@amy Let's dance!") and "only do that for you or me" in hr.chats[-1]
     system = ai["requests"][-1]["messages"][0]["content"]
-    assert "19:macarena" in system and "amy" in system
+    assert "100:Ring on It" in system and "amy" in system
     await bot.brain.close()
 
 
@@ -219,7 +223,8 @@ async def test_ai_plain_text_still_works(tmp_path, ai):
 async def test_chat_commands_without_prefix(tmp_path):
     bot = await make_bot(tmp_path)
     await bot.on_chat(AMY, "Japalo emotes")
-    assert bot.highrise.chats[-1].startswith("1.kiss 2.no")
+    page = " ".join(bot.highrise.chats)
+    assert page.startswith("1.Enthused 2.Confusion") and "more: Japalo emotes 21" in page
     await bot.on_chat(AMY, "Japalo ping")
     assert bot.highrise.chats[-1] == "pong"
     await bot.brain.close()

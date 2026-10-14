@@ -21,7 +21,8 @@ Highrise room  <->  Japalo bot (Python)  <->  OmniRoute :20128/v1  <->  OpenAI /
   - `Japalo follow me` / `Japalo stop` (the bot walks after you until told to stop, or you leave)
   - `Japalo come here`, `Japalo send heart to amy`, `Japalo emotes` (numbered list)
   - Owners can target others: `Japalo make amy do 7`, `Japalo follow amy`, emotes for `all`
-- **Your own emote numbers:** `bot/emotes.json` is the numbered list (number = position). Reorder or replace
+- **Same emote numbers as the main Japalo bot:** `bot/emotes.json` is its verified 265-emote catalog
+  (number = position, so `65` is Pouty Face in both). Reorder or replace
   it to match your other bots' numbering, or point `BOT_EMOTES_FILE` at your own file.
 - **Remembers each person:** keeps the last few messages per user, so follow-up questions make sense (`!reset` clears it).
 - **Learns:** owners teach it facts with `!learn`; they are saved in `data/memory.json` and used in every answer.
