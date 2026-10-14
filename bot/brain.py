@@ -21,6 +21,8 @@ log = logging.getLogger(__name__)
 class BrainError(Exception):
     """OmniRoute could not produce an answer."""
 
+    resting = False
+
     def __init__(self, message: str, status: int | None = None):
         super().__init__(message)
         self.status = status
@@ -84,6 +86,9 @@ class Brain:
         retries: int = 2,
         memory: Memory | None = None,
         fallback_models: list[str] | None = None,
+        min_interval: float = 4.0,
+        rate_limit_wait: float = 15.0,
+        skip_after_failure: float = 600.0,
     ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
@@ -94,6 +99,14 @@ class Brain:
         self.retries = retries
         self.memory = memory
         self.fallback_models = [m for m in (fallback_models or []) if m]
+        # Free providers (e.g. DuckDuckGo) answer steady traffic but rate-limit bursts,
+        # so requests are spaced at least `min_interval` seconds apart.
+        self.min_interval = min_interval
+        self.rate_limit_wait = rate_limit_wait
+        self.skip_after_failure = skip_after_failure
+        self._pace_lock = asyncio.Lock()
+        self._last_call = 0.0
+        self._skip_until: dict[str, float] = {}
         self.history: dict[str, deque[dict]] = defaultdict(lambda: deque(maxlen=max_history))
         self.stats = {"ok": 0, "failed": 0, "last_error": "", "last_latency": 0.0, "last_model": ""}
         self._session: aiohttp.ClientSession | None = None
@@ -138,29 +151,61 @@ class Brain:
             except ValueError as exc:
                 raise BrainError(f"Bad JSON from OmniRoute: {body[:200]}") from exc
 
+    async def _pace(self, model: str, may_skip: bool) -> None:
+        """Wait until at least `min_interval` has passed since the previous request.
+
+        If `model` started resting while this request waited in line, give up the
+        turn instead of spending it on a model that is known to be dead.
+        """
+        async with self._pace_lock:
+            if may_skip and model in self.skipped_models():
+                exc = BrainError(f"{model} is resting after a permanent failure")
+                exc.resting = True
+                raise exc
+            wait = self.min_interval - (time.monotonic() - self._last_call)
+            if wait > 0:
+                await asyncio.sleep(wait)
+            self._last_call = time.monotonic()
+
+    def skipped_models(self) -> list[str]:
+        now = time.monotonic()
+        return [m for m, until in self._skip_until.items() if until > now]
+
     async def complete(self, messages: list[dict], model: str | None = None) -> str:
-        """Ask the main model, then each fallback model in turn, until one answers."""
+        """Ask the main model, then each fallback model in turn, until one answers.
+
+        A model that fails permanently (blocked, bad key, unknown model) is skipped
+        for `skip_after_failure` seconds so every message doesn't pay for it again.
+        """
         chain = [model or self.model]
         chain += [m for m in self.fallback_models if m not in chain]
+        skipped = set(self.skipped_models())
+        live = [m for m in chain if m not in skipped] or chain
         errors = []
-        for name in chain:
+        for i, name in enumerate(live):
             try:
-                answer = await self._complete_one(messages, name)
+                answer = await self._complete_one(messages, name, may_skip=i < len(live) - 1)
                 self.stats["last_model"] = name
+                self._skip_until.pop(name, None)
                 return answer
             except BrainError as exc:
+                if exc.resting:
+                    continue
                 errors.append(f"{name}: {exc}")
+                if exc.permanent and len(live) > 1:
+                    self._skip_until[name] = time.monotonic() + self.skip_after_failure
         self.stats["failed"] += 1
         self.stats["last_error"] = " | ".join(errors)
         raise BrainError(self.stats["last_error"])
 
-    async def _complete_one(self, messages: list[dict], model: str) -> str:
+    async def _complete_one(self, messages: list[dict], model: str, may_skip: bool = False) -> str:
         """One model, with retries and exponential backoff."""
         payload = {"model": model, "messages": messages, "stream": False}
         last_exc: Exception | None = None
         for attempt in range(self.retries + 1):
-            started = time.monotonic()
             try:
+                await self._pace(model, may_skip)
+                started = time.monotonic()
                 data = await self._post("/chat/completions", payload)
                 text = (data["choices"][0]["message"].get("content") or "").strip()
                 if not text:
@@ -169,13 +214,17 @@ class Brain:
                 self.stats["last_latency"] = time.monotonic() - started
                 return text
             except (BrainError, aiohttp.ClientError, asyncio.TimeoutError, KeyError, IndexError) as exc:
+                if isinstance(exc, BrainError) and exc.resting:
+                    raise
                 last_exc = exc
                 log.warning("OmniRoute %s attempt %d failed: %s", model, attempt + 1, exc)
                 if isinstance(exc, BrainError) and exc.permanent:
-                    break
+                    raise exc
                 if attempt < self.retries:
-                    await asyncio.sleep(2**attempt)
-        raise BrainError(str(last_exc))
+                    rate_limited = isinstance(exc, BrainError) and exc.status == 429
+                    await asyncio.sleep(self.rate_limit_wait * (attempt + 1) if rate_limited else 2**attempt)
+        status = last_exc.status if isinstance(last_exc, BrainError) else None
+        raise BrainError(str(last_exc), status)
 
     async def ask(self, user_id: str, username: str, text: str) -> str:
         """Answer a user, remembering the conversation with them."""

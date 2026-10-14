@@ -31,6 +31,8 @@ class Config:
     omniroute_key: str = ""
     model: str = "auto"
     fallback_models: list[str] = field(default_factory=list)
+    min_interval: float = 4.0
+    rate_limit_wait: float = 15.0
     bot_name: str = "Japalo"
     owners: set[str] = field(default_factory=set)
     prefix: str = "!"
@@ -56,6 +58,8 @@ class Config:
         cfg.fallback_models = [
             m.strip() for m in os.environ.get("OMNIROUTE_FALLBACK_MODELS", "").split(",") if m.strip()
         ]
+        cfg.min_interval = float(os.environ.get("OMNIROUTE_MIN_INTERVAL", cfg.min_interval))
+        cfg.rate_limit_wait = float(os.environ.get("OMNIROUTE_RATE_LIMIT_WAIT", cfg.rate_limit_wait))
         cfg.bot_name = os.environ.get("BOT_NAME", cfg.bot_name)
         cfg.owners = _csv(os.environ.get("BOT_OWNERS", ""))
         cfg.prefix = os.environ.get("BOT_PREFIX", cfg.prefix)

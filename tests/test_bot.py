@@ -30,6 +30,9 @@ async def omniroute(aiohttp_server):
     async def chat(request):
         body = await request.json()
         state["requests"].append(body)
+        if body["model"] == "limited" and state.setdefault("limited", 1) > 0:
+            state["limited"] -= 1
+            return web.Response(status=429, text="ERR_RATE_LIMIT")
         if body["model"] == "blocked":
             return web.Response(status=403, text="only from within the official app")
         if state["fail"] > 0:
@@ -61,6 +64,18 @@ def make_bot(tmp_path, url):
 
 async def no_sleep(_):
     return None
+
+
+@pytest.fixture(autouse=True)
+def fast_brain(monkeypatch):
+    """No real pacing waits in tests unless a test measures them."""
+    original = Brain.__init__
+
+    def init(self, *a, **kw):
+        kw.setdefault("min_interval", 0)
+        original(self, *a, **kw)
+
+    monkeypatch.setattr(Brain, "__init__", init)
 
 
 def test_chunk_text_splits_on_words():
@@ -173,4 +188,36 @@ async def test_fallback_models_used_when_main_model_blocked(omniroute, monkeypat
     with pytest.raises(BrainError) as err:
         await brain.complete([{"role": "user", "content": "x"}])
     assert err.value.args[0].startswith("blocked: HTTP 403")
+    await brain.close()
+
+
+async def test_rate_limit_waits_then_retries_same_model(omniroute, monkeypatch):
+    waits = []
+
+    async def record_sleep(seconds):
+        waits.append(seconds)
+
+    monkeypatch.setattr(asyncio, "sleep", record_sleep)
+    brain = Brain(omniroute["url"], model="limited", rate_limit_wait=15)
+    assert await brain.complete([{"role": "user", "content": "x"}]) == "echo: x"
+    assert waits == [15]  # waited for the limit to clear instead of 1s
+    await brain.close()
+
+
+async def test_permanently_failing_model_is_rested(omniroute, monkeypatch):
+    monkeypatch.setattr(asyncio, "sleep", no_sleep)
+    brain = Brain(omniroute["url"], model="blocked", fallback_models=["backup"])
+    await brain.complete([{"role": "user", "content": "a"}])
+    await brain.complete([{"role": "user", "content": "b"}])
+    assert [r["model"] for r in omniroute["requests"]] == ["blocked", "backup", "backup"]
+    assert brain.skipped_models() == ["blocked"]
+    await brain.close()
+
+
+async def test_requests_are_spaced_out(omniroute):
+    import time as _time
+    brain = Brain(omniroute["url"], min_interval=0.3)
+    started = _time.monotonic()
+    await asyncio.gather(*(brain.complete([{"role": "user", "content": str(i)}]) for i in range(3)))
+    assert _time.monotonic() - started >= 0.6
     await brain.close()

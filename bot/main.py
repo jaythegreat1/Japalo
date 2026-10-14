@@ -47,6 +47,8 @@ class JapaloBot(BaseBot):
             timeout=self.config.request_timeout,
             memory=Memory(self.config.data_dir / "memory.json"),
             fallback_models=self.config.fallback_models,
+            min_interval=self.config.min_interval,
+            rate_limit_wait=self.config.rate_limit_wait,
         )
         self.bot_user_id = ""
         self.last_used: dict[str, float] = {}
@@ -184,9 +186,11 @@ class JapaloBot(BaseBot):
             s = self.brain.stats
             up = int(time.monotonic() - self.started_at)
             state = "online" if self.brain_online else "OFFLINE"
+            skipped = self.brain.skipped_models()
             return (
-                f"Brain {state} | model {self.brain.model} (last answer: {s['last_model'] or '-'}) | answers {s['ok']} ok, "
-                f"{s['failed']} failed | last {s['last_latency']:.1f}s | up {up // 60}m"
+                f"Brain {state} | model {self.brain.model} (last answer: {s['last_model'] or '-'}) "
+                f"| answers {s['ok']} ok, {s['failed']} failed | last {s['last_latency']:.1f}s "
+                f"| up {up // 60}m" + (f" | resting: {', '.join(skipped)}" if skipped else "")
             )
         if name == "facts":
             if not mem or not mem.facts:
