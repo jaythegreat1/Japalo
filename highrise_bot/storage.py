@@ -80,6 +80,12 @@ CREATE TABLE IF NOT EXISTS captured_emotes (
     first_seen_user_id TEXT NOT NULL,
     first_seen_at REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS custom_commands (
+    name TEXT PRIMARY KEY,
+    spec TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    updated_at REAL NOT NULL
+);
 """
 
 
@@ -476,3 +482,36 @@ class Storage:
             "FROM captured_emotes ORDER BY first_seen_at DESC"
         ) as cursor:
             return list(await cursor.fetchall())
+
+    # ------------------------------------------------------------------
+    # Custom commands (built by the AI command designer)
+    # ------------------------------------------------------------------
+
+    async def save_custom_command(self, name: str, spec_json: str, created_by: str) -> None:
+        conn = self._require_conn()
+        async with self._lock:
+            await conn.execute(
+                """
+                INSERT INTO custom_commands (name, spec, created_by, updated_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(name) DO UPDATE SET
+                    spec = excluded.spec,
+                    created_by = excluded.created_by,
+                    updated_at = excluded.updated_at
+                """,
+                (name, spec_json, created_by, time.time()),
+            )
+            await conn.commit()
+
+    async def delete_custom_command(self, name: str) -> bool:
+        conn = self._require_conn()
+        async with self._lock:
+            cursor = await conn.execute("DELETE FROM custom_commands WHERE name = ?", (name,))
+            await conn.commit()
+        return cursor.rowcount > 0
+
+    async def list_custom_commands(self) -> list[tuple[str, str]]:
+        conn = self._require_conn()
+        async with conn.execute("SELECT name, spec FROM custom_commands ORDER BY name") as cursor:
+            rows = await cursor.fetchall()
+        return [(row[0], row[1]) for row in rows]

@@ -44,6 +44,11 @@ HELP_CATEGORIES: dict[str, tuple[str, bool, list[str]]] = {
             "Staff: Japalo learn <fact>, Japalo forget <n>, Japalo model <name>, "
             "Japalo follow @name, Japalo emote 65 on @name",
             "Whisper the bot to chat privately",
+            "!customcommands — commands the AI built for this room",
+            "Staff: Japalo make a command <describe it> — the AI asks questions if "
+            "needed and drafts it; Japalo test [@name] runs it, Japalo save keeps it "
+            "(only after a passing test), Japalo cancel drops it; "
+            "Japalo edit command !name <changes>; !delcommand <name>",
         ],
     ),
     "games": (

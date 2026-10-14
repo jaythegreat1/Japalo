@@ -87,6 +87,30 @@ planned action goes through the same checks as the typed commands
 needs staff). `!config set ai off` turns off AI chat but keeps the typed
 actions. Code: `highrise_bot/ai/` and `highrise_bot/commands/ai_commands.py`.
 
+### Build new commands by describing them (staff)
+
+Staff can describe a command in plain words and the AI builds it:
+
+```
+Japalo make a command where I hug someone and they blush
+  -> the AI asks about anything unclear, suggests ideas, or whispers a draft:
+     !hug @name: 1. you do Hug Yourself  2. wait 1s  3. they do Bashful  4. room sees "..."
+Japalo call it hug, and add your first idea      (change anything in plain words)
+Japalo test @amy     -> runs it for real; problems are reported
+Japalo save          -> keeps it (only after a passing test); anyone can use !hug @name
+```
+
+Also `Japalo show` (current draft), `Japalo cancel`, `Japalo edit command !hug
+<changes>`, `!customcommands` (list) and `!delcommand <name>` (staff).
+
+Commands are **data, not code**: the AI can only combine fixed building blocks
+(emotes for you / them / the bot, room messages, whispers, reactions, waits,
+the bot walking over, random picks). The bot checks every draft against the
+emote catalog and its limits (12 steps, 10s of waits, no reusing built-in or
+existing names); when a draft fails a check, the AI is shown the exact errors
+and fixes it itself (up to twice). Saved commands live in the database
+(`custom_commands` table), so on Railway keep the `/app/data` volume.
+
 ### AI setup (Groq first, OmniRoute as fallback)
 
 The AI tries its providers in order and moves to the next one when one fails

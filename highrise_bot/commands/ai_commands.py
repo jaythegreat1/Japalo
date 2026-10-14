@@ -40,10 +40,6 @@ def chunk_text(text: str, limit: int = CHAT_LIMIT) -> list[str]:
     return chunks
 
 
-def _key(text: str) -> str:
-    return re.sub(r"[^a-z0-9]", "", text.casefold())
-
-
 class AICommandsMixin:
     """Talking to Japalo: any chat that STARTS with the bot's name ("Japalo ...").
 
@@ -180,8 +176,11 @@ class AICommandsMixin:
             await self._ai_say(user, f"Yes? Try '{self.ai_config.bot_name} help'.", whisper)
             return
         first, _, rest = text.partition(" ")
-        if first.casefold().strip("!?.,") in AI_SUBCOMMANDS:
+        if first.casefold().strip("!?.,") in AI_SUBCOMMANDS and self._design_session(user.id) is None:
             await self._ai_subcommand(user, first.casefold().strip("!?.,"), rest.strip(), whisper)
+            return
+        if self._wants_design(user, text):  # "make a command ..." or an open design conversation
+            await self._handle_design(user, text)
             return
         actions = intents.parse(text)
         if actions:
@@ -230,17 +229,7 @@ class AICommandsMixin:
     # ------------------------------------------------------------------
 
     def _ai_find_emote(self, ref: object) -> tuple[int, Emote] | None:
-        text = str(ref).strip().lstrip("#")
-        if text.isdigit():
-            emote = self.catalog.get_by_number(int(text))
-            return (int(text), emote) if emote else None
-        everything = self.catalog.filter()
-        wanted = _key(text)
-        for number, emote in everything:
-            if wanted and (_key(emote.name) == wanted or emote.emote_id.casefold() == text.casefold()):
-                return number, emote
-        partial = [(n, e) for n, e in everything if len(wanted) >= 3 and wanted in _key(e.name)]
-        return partial[0] if len(partial) == 1 else None
+        return self.catalog.find(ref)
 
     async def _ai_target(self, user: User, ref: object, staff_check):
         """'me' / 'bot' / a username -> User, "bot", or a refusal string."""
@@ -356,6 +345,7 @@ class AICommandsMixin:
                 f"- {bot} send heart to @name\n"
                 f"- {bot} come dance with me — the AI picks the moves\n"
                 f"- {bot} status / reset / facts\n"
+                f"- Staff: {bot} make a command ... — the AI builds it, then {bot} test / save\n"
                 "Full list: !help ai",
             )
             return

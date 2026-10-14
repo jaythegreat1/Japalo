@@ -218,13 +218,16 @@ class Brain:
         now = time.monotonic()
         return [label for label, until in self._cool_until.items() if until > now]
 
-    async def complete(self, messages: list[dict], model: str | None = None) -> str:
+    async def complete(
+        self, messages: list[dict], model: str | None = None, overrides: dict | None = None
+    ) -> str:
         """Ask each route in order until one answers.
 
         A route that fails permanently rests for `skip_after_failure` seconds and
         a rate-limited one cools down for the provider's Retry-After, so every
         message doesn't pay for them again. If every route is resting or cooling,
-        all of them are tried anyway.
+        all of them are tried anyway. `overrides` replaces optional fields a route
+        already sends (e.g. {"reasoning_effort": "medium"} for a harder task).
         """
         routes = list(self.routes)
         if model:  # explicit model: ask it first, on the first route's provider
@@ -236,7 +239,9 @@ class Brain:
         errors = []
         for i, route in enumerate(live):
             try:
-                answer = await self._complete_one(messages, route, may_skip=i < len(live) - 1)
+                answer = await self._complete_one(
+                    messages, route, may_skip=i < len(live) - 1, overrides=overrides
+                )
                 self.stats["last_model"] = route.label
                 self._skip_until.pop(route.label, None)
                 return answer
@@ -250,7 +255,9 @@ class Brain:
         self.stats["last_error"] = " | ".join(errors)
         raise BrainError(self.stats["last_error"])
 
-    async def _complete_one(self, messages: list[dict], route: Route, may_skip: bool = False) -> str:
+    async def _complete_one(
+        self, messages: list[dict], route: Route, may_skip: bool = False, overrides: dict | None = None
+    ) -> str:
         """One route, with retries and backoff.
 
         A rate limit (429) with other routes still to try cools this route down
@@ -258,7 +265,8 @@ class Brain:
         """
         last_exc: Exception | None = None
         for attempt in range(self.retries + 1):
-            payload = {"model": route.model, "messages": messages, "stream": False, **route.extra}
+            extra = {k: (overrides or {}).get(k, v) for k, v in route.extra.items()}
+            payload = {"model": route.model, "messages": messages, "stream": False, **extra}
             try:
                 await self._pace(route, may_skip)
                 started = time.monotonic()

@@ -25,6 +25,7 @@ from highrise.models import AnchorPosition, Error, Position, SessionMetadata
 from . import personality
 from .commands.admin_commands import AdminCommandsMixin
 from .commands.ai_commands import AICommandsMixin
+from .commands.command_builder import CommandBuilderMixin
 from .commands.economy_commands import EconomyCommandsMixin
 from .commands.emote_commands import EmoteCommandsMixin
 from .commands.game_commands import GameCommandsMixin
@@ -90,6 +91,8 @@ COMMAND_TABLE: dict[str, str] = {
     "!profile": "_send_profile",
     "!endgame": "_force_end_game",
     "!config": "_handle_config",
+    "!customcommands": "_list_custom_commands",
+    "!delcommand": "_delete_custom_command",
 }
 
 # command -> which minigame it starts. Handler signature: self._start_game(game).
@@ -131,6 +134,7 @@ STOP_COMMANDS = {"stop", "!stop"}
 class HighriseRoomBot(
     BaseBot,
     AICommandsMixin,
+    CommandBuilderMixin,
     EmoteCommandsMixin,
     InteractionCommandsMixin,
     GameCommandsMixin,
@@ -178,8 +182,10 @@ class HighriseRoomBot(
         self.interactions = load_interactions(INTERACTIONS_PATH)
         self._interaction_cooldowns: dict[str, float] = {}
 
-        # AI: talking to "Japalo ..." and letting the AI act (ai_commands.py).
+        # AI: talking to "Japalo ..." and letting the AI act (ai_commands.py),
+        # plus AI-built custom commands (command_builder.py).
         self._init_ai()
+        self._init_command_builder()
 
     # ------------------------------------------------------------------
     # Personality
@@ -208,6 +214,7 @@ class HighriseRoomBot(
         for key, (_type, default) in SETTINGS_SCHEMA.items():
             self._settings[key] = stored_settings.get(key, default)
         logger.info("Bot started in room owned by %s", self.room_owner_id)
+        await self._load_custom_commands()
         await self._ai_on_start(session_metadata)
         text = self._voice(
             personality.STARTUP_MESSAGES,
@@ -385,6 +392,10 @@ class HighriseRoomBot(
         handler_name = COMMAND_TABLE.get(command)
         if handler_name is not None:
             await getattr(self, handler_name)(user, args)
+            return
+        custom = self.custom_commands.get(command[1:]) if command.startswith("!") else None
+        if custom is not None:
+            await self._run_custom_command(user, custom, args)
 
     async def on_whisper(self, user: User, message: str) -> None:
         """Whispers go straight to the AI (the bot's name is optional there)."""
@@ -399,6 +410,12 @@ class HighriseRoomBot(
     # ------------------------------------------------------------------
     # Shared utility (used across multiple command mixins)
     # ------------------------------------------------------------------
+
+    def _reserved_command_names(self) -> set[str]:
+        """Built-in command names (without "!"), which custom commands may not reuse."""
+        names = set(COMMAND_TABLE) | set(GAME_START_COMMANDS) | set(ACTION_COMMANDS)
+        names |= set(MOD_CHANGE_COMMANDS) | STOP_COMMANDS | {"!unmute"}
+        return {name.lstrip("!") for name in names}
 
     async def _find_room_user(self, query: str) -> User | None:
         normalized = query.strip().lstrip("@")

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import random
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -45,6 +46,29 @@ class EmoteCatalog:
 
     def get_by_number(self, number: int) -> Emote | None:
         return self._by_number.get(number)
+
+    def find(self, ref: object) -> tuple[int, Emote] | None:
+        """Look up an emote by number ("65", "#65"), exact Highrise id, or name.
+
+        Names match ignoring case, spaces and punctuation ("lets go shopping"),
+        and a fragment of 3+ characters matches when exactly one name has it.
+        """
+        text = str(ref).strip().lstrip("#")
+        if text.isdigit():
+            emote = self.get_by_number(int(text))
+            return (int(text), emote) if emote else None
+
+        def key(value: str) -> str:
+            return re.sub(r"[^a-z0-9]", "", value.casefold())
+
+        wanted = key(text)
+        for number, emote in self._by_number.items():
+            if emote.emote_id.casefold() == text.casefold() or (wanted and key(emote.name) == wanted):
+                return number, emote
+        if len(wanted) < 3:
+            return None
+        partial = [(n, e) for n, e in self._by_number.items() if wanted in key(e.name)]
+        return partial[0] if len(partial) == 1 else None
 
     def filter(self, rarity: str | None = None, query: str | None = None) -> list[tuple[int, Emote]]:
         """Return numbered entries matching an optional rarity/name/id query."""
