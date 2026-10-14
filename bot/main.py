@@ -46,6 +46,7 @@ class JapaloBot(BaseBot):
             max_history=self.config.max_history,
             timeout=self.config.request_timeout,
             memory=Memory(self.config.data_dir / "memory.json"),
+            fallback_models=self.config.fallback_models,
         )
         self.bot_user_id = ""
         self.last_used: dict[str, float] = {}
@@ -184,7 +185,7 @@ class JapaloBot(BaseBot):
             up = int(time.monotonic() - self.started_at)
             state = "online" if self.brain_online else "OFFLINE"
             return (
-                f"Brain {state} | model {self.brain.model} | answers {s['ok']} ok, "
+                f"Brain {state} | model {self.brain.model} (last answer: {s['last_model'] or '-'}) | answers {s['ok']} ok, "
                 f"{s['failed']} failed | last {s['last_latency']:.1f}s | up {up // 60}m"
             )
         if name == "facts":

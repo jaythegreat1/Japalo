@@ -21,6 +21,15 @@ log = logging.getLogger(__name__)
 class BrainError(Exception):
     """OmniRoute could not produce an answer."""
 
+    def __init__(self, message: str, status: int | None = None):
+        super().__init__(message)
+        self.status = status
+
+    @property
+    def permanent(self) -> bool:
+        """Errors that retrying the same model will not fix (bad key, blocked, no such model)."""
+        return self.status is not None and 400 <= self.status < 500 and self.status not in (408, 429)
+
 
 class Memory:
     """Facts the bot has been taught, persisted as JSON."""
@@ -74,6 +83,7 @@ class Brain:
         timeout: float = 45.0,
         retries: int = 2,
         memory: Memory | None = None,
+        fallback_models: list[str] | None = None,
     ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
@@ -83,8 +93,9 @@ class Brain:
         self.timeout = timeout
         self.retries = retries
         self.memory = memory
+        self.fallback_models = [m for m in (fallback_models or []) if m]
         self.history: dict[str, deque[dict]] = defaultdict(lambda: deque(maxlen=max_history))
-        self.stats = {"ok": 0, "failed": 0, "last_error": "", "last_latency": 0.0}
+        self.stats = {"ok": 0, "failed": 0, "last_error": "", "last_latency": 0.0, "last_model": ""}
         self._session: aiohttp.ClientSession | None = None
 
     async def _get_session(self) -> aiohttp.ClientSession:
@@ -121,15 +132,31 @@ class Brain:
         ) as resp:
             body = await resp.text()
             if resp.status >= 400:
-                raise BrainError(f"HTTP {resp.status}: {body[:200]}")
+                raise BrainError(f"HTTP {resp.status}: {body[:200]}", resp.status)
             try:
                 return json.loads(body)
             except ValueError as exc:
                 raise BrainError(f"Bad JSON from OmniRoute: {body[:200]}") from exc
 
     async def complete(self, messages: list[dict], model: str | None = None) -> str:
-        """One chat completion with retries and exponential backoff."""
-        payload = {"model": model or self.model, "messages": messages, "stream": False}
+        """Ask the main model, then each fallback model in turn, until one answers."""
+        chain = [model or self.model]
+        chain += [m for m in self.fallback_models if m not in chain]
+        errors = []
+        for name in chain:
+            try:
+                answer = await self._complete_one(messages, name)
+                self.stats["last_model"] = name
+                return answer
+            except BrainError as exc:
+                errors.append(f"{name}: {exc}")
+        self.stats["failed"] += 1
+        self.stats["last_error"] = " | ".join(errors)
+        raise BrainError(self.stats["last_error"])
+
+    async def _complete_one(self, messages: list[dict], model: str) -> str:
+        """One model, with retries and exponential backoff."""
+        payload = {"model": model, "messages": messages, "stream": False}
         last_exc: Exception | None = None
         for attempt in range(self.retries + 1):
             started = time.monotonic()
@@ -143,11 +170,11 @@ class Brain:
                 return text
             except (BrainError, aiohttp.ClientError, asyncio.TimeoutError, KeyError, IndexError) as exc:
                 last_exc = exc
-                log.warning("OmniRoute attempt %d failed: %s", attempt + 1, exc)
+                log.warning("OmniRoute %s attempt %d failed: %s", model, attempt + 1, exc)
+                if isinstance(exc, BrainError) and exc.permanent:
+                    break
                 if attempt < self.retries:
                     await asyncio.sleep(2**attempt)
-        self.stats["failed"] += 1
-        self.stats["last_error"] = str(last_exc)
         raise BrainError(str(last_exc))
 
     async def ask(self, user_id: str, username: str, text: str) -> str:

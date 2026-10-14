@@ -12,7 +12,10 @@ from bot.config import Config
 
 async def check(question: str) -> int:
     config = Config.from_env()
-    brain = Brain(config.omniroute_url, config.omniroute_key, config.model, retries=0)
+    brain = Brain(
+        config.omniroute_url, config.omniroute_key, config.model, retries=0,
+        fallback_models=config.fallback_models,
+    )
     try:
         print(f"OmniRoute at {config.omniroute_url}")
         try:
@@ -27,7 +30,7 @@ async def check(question: str) -> int:
             print(f"  chat failed: {exc}")
             print("  Connect a provider in the OmniRoute dashboard, or set OMNIROUTE_MODEL.")
             return 2
-        print(f"  model {config.model} answered: {answer}")
+        print(f"  model {brain.stats['last_model']} answered: {answer}")
         return 0
     finally:
         await brain.close()

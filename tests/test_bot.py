@@ -30,6 +30,8 @@ async def omniroute(aiohttp_server):
     async def chat(request):
         body = await request.json()
         state["requests"].append(body)
+        if body["model"] == "blocked":
+            return web.Response(status=403, text="only from within the official app")
         if state["fail"] > 0:
             state["fail"] -= 1
             return web.Response(status=503, text="upstream down")
@@ -159,3 +161,16 @@ async def test_cooldown_blocks_spam(tmp_path, omniroute, monkeypatch):
     await bot.on_chat(User("u1", "amy"), "japalo two")
     assert len(bot.highrise.chats) == 1
     await bot.brain.close()
+
+
+async def test_fallback_models_used_when_main_model_blocked(omniroute, monkeypatch):
+    monkeypatch.setattr(asyncio, "sleep", no_sleep)
+    brain = Brain(omniroute["url"], model="blocked", retries=2, fallback_models=["backup"])
+    assert await brain.complete([{"role": "user", "content": "x"}]) == "echo: x"
+    assert [r["model"] for r in omniroute["requests"]] == ["blocked", "backup"]  # 403 is not retried
+    assert brain.stats["last_model"] == "backup"
+    brain.fallback_models = []
+    with pytest.raises(BrainError) as err:
+        await brain.complete([{"role": "user", "content": "x"}])
+    assert err.value.args[0].startswith("blocked: HTTP 403")
+    await brain.close()

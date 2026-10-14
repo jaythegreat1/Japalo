@@ -30,6 +30,7 @@ class Config:
     omniroute_url: str = "http://localhost:20128/v1"
     omniroute_key: str = ""
     model: str = "auto"
+    fallback_models: list[str] = field(default_factory=list)
     bot_name: str = "Japalo"
     owners: set[str] = field(default_factory=set)
     prefix: str = "!"
@@ -52,6 +53,9 @@ class Config:
         cfg.omniroute_url = os.environ.get("OMNIROUTE_URL", cfg.omniroute_url).rstrip("/")
         cfg.omniroute_key = os.environ.get("OMNIROUTE_API_KEY", cfg.omniroute_key)
         cfg.model = os.environ.get("OMNIROUTE_MODEL", cfg.model)
+        cfg.fallback_models = [
+            m.strip() for m in os.environ.get("OMNIROUTE_FALLBACK_MODELS", "").split(",") if m.strip()
+        ]
         cfg.bot_name = os.environ.get("BOT_NAME", cfg.bot_name)
         cfg.owners = _csv(os.environ.get("BOT_OWNERS", ""))
         cfg.prefix = os.environ.get("BOT_PREFIX", cfg.prefix)
