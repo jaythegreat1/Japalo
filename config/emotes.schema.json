@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["name", "id", "rarity", "duration_seconds"],
+    "additionalProperties": false,
+    "properties": {
+      "name": { "type": "string", "minLength": 1 },
+      "id": { "type": "string", "minLength": 1 },
+      "rarity": {
+        "type": "string",
+        "enum": ["common", "none_", "unknown", "uncommon", "rare", "epic"]
+      },
+      "duration_seconds": {
+        "type": "number",
+        "exclusiveMinimum": 0
+      }
+    }
+  }
+}

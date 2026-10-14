@@ -1,0 +1,11 @@
+{
+  "_comment": "Customize this for your room. Matching is case-insensitive and whole-word/phrase (so 'assumption' won't match 'ass'). This starter list is intentionally mild/generic — add or remove phrases as your room's rules require. Do not put self-harm or crisis-related phrases here: an automated 'stop spamming' warning is the wrong response to someone in genuine distress, and this bot is not built to handle that.",
+  "blocked_phrases": [
+    "idiot",
+    "stupid",
+    "shut up",
+    "dumbass",
+    "loser",
+    "moron"
+  ]
+}

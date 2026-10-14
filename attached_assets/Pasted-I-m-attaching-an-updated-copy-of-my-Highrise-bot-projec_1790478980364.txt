@@ -1,0 +1,47 @@
+I'm attaching an updated copy of my Highrise bot project (Japalo-Highrise-Bot-emote-discovery-fix.tar.gz). 
+This adds a fallback to fetch_catalog.py so it can find emote candidates even when Highrise's 
+category="emote" filter returns nothing. Please do the following in order and report back honestly 
+at each step — don't skip steps or round up results.
+
+STEP 1 — Apply the update, without touching live data
+From the attached archive, update ONLY these files:
+- tools/emote_catalog/fetch_catalog.py
+- tools/emote_catalog/README.md
+- tests/test_fetch_catalog.py
+
+Do NOT overwrite data/bot.db, my .env/secrets, or config/emotes.json.
+
+STEP 2 — Verify nothing broke
+Run: python3 -m unittest tests.test_fetch_catalog -v
+Tell me the real pass/fail count.
+
+STEP 3 — Re-run Stage 1 discovery
+Run: python tools/emote_catalog/fetch_catalog.py
+Show me the exact printed output, especially any line mentioning "known emote namespace" 
+or "item(s) already present." Tell me exactly how many candidates it found this time, 
+and how that compares to the 128 already in config/emotes.json. Don't summarize — quote 
+the actual lines it printed.
+
+STEP 4 — If new candidates were found, verify them live (use a TEST room, not my live room)
+Set up a separate test bot + a private/empty test room and run:
+export HIGHRISE_ROOM_ID=<test room id>
+export HIGHRISE_BOT_TOKEN=<test bot token>
+export EMOTE_VERIFY_EXISTING=true
+export EMOTE_VERIFY_PRUNE_INVALID=true
+python -m highrise tools.emote_catalog.verify_emotes:EmoteVerifierBot "$HIGHRISE_ROOM_ID" "$HIGHRISE_BOT_TOKEN"
+
+This will now mark each confirmed id "verified" right away with a placeholder duration 
+instead of needing manual timing — that's expected. Re-run it (it resumes automatically) 
+until nothing "pending_verification" is left. Give me the final status breakdown.
+
+STEP 5 — Merge the results
+Run: python tools/emote_catalog/merge_catalog.py --dry-run
+Show me the report (how many new entries, how many skipped and why) before running it 
+for real without --dry-run.
+
+STEP 6 — Final report
+Tell me: the new total emote count in config/emotes.json, how many were newly added, 
+their names/rarities, and confirm data/bot.db and my secrets were never touched.
+
+If Step 3 finds zero candidates even with this fallback, don't guess or invent IDs — 
+just tell me the exact category breakdown it printed and stop there.

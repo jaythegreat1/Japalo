@@ -1,0 +1,3 @@
+- [Japalo Python runtime](japalo-python-runtime.md) — keep the project on Python 3.11 and install the pinned SDK directly against `python3.11`.
+- [Highrise emote audit](highrise-emote-audit.md) — all 342 non-legendary IDs pass when the bot targets itself; target-user failures are not global catalog evidence.
+- [Highrise emote catalog API](highrise-emote-catalog-api.md) — the collection emote filter is empty; item-detail endpoints provide authoritative current names and existence.

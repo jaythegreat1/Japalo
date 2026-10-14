@@ -1,0 +1,148 @@
+Fix command-flow bugs
+There are also several smaller issues I would have Replit clean up:
+moderation can block a message and still allow later command/game/emote handling to continue;
+warning_mute_threshold exists but warning/mute logic still contains hard-coded thresholds;
+the should_auto_mute helper is present but not actually integrated;
+message pagination/chunking is not centralized;
+_remove_rejected_emote() performs direct catalog mutation instead of quarantine;
+reward calculation can silently reduce requested reward amounts to a lower denomination;
+auto-buy needs stronger transaction/idempotency safeguards;
+SQLite lacks migration/version management;
+the catalog fetch/verify/merge pipeline lacks robust snapshot rollback.
+These are not cosmetic issues.
+10. The TypeScript/React portion
+This is one of the clearest architectural decisions Replit needs to make.
+The archive contains a Node/React/API scaffold, but it currently looks largely disconnected from the actual Python bot.
+It gives the Agent more files, more technologies and more surface area without giving the bot corresponding functionality.
+I would either:
+A. remove the unused scaffold, or
+B. explicitly turn it into the control plane:
+Web dashboard
+    ↓
+Bot API
+    ↓
+Bot process
+    ↓
+Highrise
+with things such as:
+Live bot status
+Emote catalog
+Catalog audit
+Verification history
+Moderation logs
+Errors
+Bot restart
+Emote testing
+Configuration
+The current middle ground is the least useful state.
+Skills I would add to Replit beyond the previous five
+The previous five were:
+agent-browser
+web-scraping
+safe-browser
+test-driven-development
+systematic-debugging
+For this specific codebase, I would add these.
+6. source-driven-development
+GitHub: Addy Osmani's agent-skills
+This is particularly valuable because your project depends on an external API whose behavior matters more than the model's prior knowledge. The skill routing explicitly emphasizes verifying implementation against authoritative documentation.
+That should be a hard rule:
+Highrise documentation/source
+        >
+LLM memory
+        >
+community claims
+This becomes especially important because the official Highrise API documentation currently says the generic Items endpoint does not return emotes.
+7. security-and-hardening
+GitHub:
+security-and-hardening / SKILL.md
+This project contains:
+Highrise API tokens
+wallet/gold functionality
+bot administration
+user-generated chat
+external API calls
+filesystem writes
+subprocess execution
+web server exposure
+That is enough attack surface to make this mandatory.
+The skill specifically covers external integrations, authentication, storage, secret handling, dependency auditing, input validation and authorization.
+8. code-review-and-quality
+GitHub:
+code-review-and-quality / SKILL.md
+This is important because your biggest risk now is not inability to write code.
+It is Replit changing one subsystem while silently breaking another.
+The skill explicitly checks architectural leakage, unclear boundaries, external-data validation, performance and security concerns.
+I would require an independent review after every major emote-pipeline change.
+9. constraint-driven-development
+GitHub:
+constraint-driven-development / SKILL.md
+This is unusually relevant to your project.
+You have hard constraints such as:
+ONLY actual Highrise emotes
+ONLY currently usable entries
+ONLY desired rarities
+EXACT official IDs
+EXACT official names
+NO invented entries
+NO future entries
+NO ordinary animations/movements
+NO global deletion from target-specific errors
+This skill is specifically designed to turn requirements into measurable constraints that can be mechanically checked rather than relying on the agent to remember them.
+That is exactly what your emote system needs.
+10. observability-and-instrumentation
+GitHub:
+observability-and-instrumentation / SKILL.md
+For this bot, every emote-verification attempt should generate structured evidence:
+catalog_version
+emote_id
+name
+rarity
+source_check
+runtime_check
+target
+result
+error_class
+latency
+timestamp
+Then when one emote suddenly stops working, you can identify exactly when and why.
+The skill explicitly focuses on structured logs, metrics, tracing and production diagnostics.
+11. ci-cd-and-automation
+GitHub:
+ci-cd-and-automation / SKILL.md
+This should create a mandatory gate before Replit deploys:
+syntax
+↓
+dependency check
+↓
+unit tests
+↓
+integration tests
+↓
+catalog schema validation
+↓
+duplicate-ID check
+↓
+rarity validation
+↓
+release-state validation
+↓
+catalog regression check
+↓
+security checks
+↓
+deploy
+The skill is specifically designed to prevent changes reaching production without quality gates.
+12. browser-testing-with-devtools
+You already had browser testing in the previous recommendations, but I would specifically use the Addy Osmani implementation rather than treating generic browser automation as enough.
+browser-testing-with-devtools / SKILL.md
+The important capability is not simply clicking a website.
+It can inspect live network requests and responses, DOM state and console output.
+For your problem, network inspection is potentially much more valuable than scraping rendered text because it lets Replit investigate what the Highrise web client itself is actually requesting.
+The skill I would make specifically for THIS project
+More important than any generic GitHub skill:
+highrise-emote-engineering
+I would have Replit create a project-local:
+/.agents/skills/highrise-emote-engineering/SKILL.md
+Replit explicitly supports project-local skills in /.agents/skills, and those skills persist across Agent sessions.
+That skill should contain the project's permanent laws
