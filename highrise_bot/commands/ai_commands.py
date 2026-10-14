@@ -326,7 +326,10 @@ class AICommandsMixin:
                 notes.append("Stopped following.")
             else:
                 notes.append("Only the person I'm following or staff can stop that.")
-        if await self.emote_loops.stop(user.id):
+        stopped = await self.emote_loops.stop(user.id)
+        logger.info("AI stop by %s (%s): loop %s", user.username, user.id,
+                    "stopped" if stopped else "not running")
+        if stopped:
             notes.append("Your emote loop stopped.")
         return " ".join(notes) or "Nothing to stop."
 

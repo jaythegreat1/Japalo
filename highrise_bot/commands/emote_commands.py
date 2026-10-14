@@ -74,6 +74,7 @@ class EmoteCommandsMixin:
             return
 
         async def send(emote_id: str, target_user_id: str) -> None:
+            logger.info("Emote loop send: #%s %s -> %s", number, emote_id, target_user_id)
             try:
                 await self.highrise.send_emote(emote_id, target_user_id)
             except Exception as error:
@@ -332,7 +333,10 @@ class EmoteCommandsMixin:
             return True
 
     async def _stop_emote(self, user: User, args: list[str] | None = None) -> None:
-        if await self.emote_loops.stop(user.id):
+        stopped = await self.emote_loops.stop(user.id)
+        logger.info("Stop requested by %s (%s): loop %s", user.username, user.id,
+                    "stopped" if stopped else "not running")
+        if stopped:
             await self.highrise.send_whisper(user.id, "Your emote loop stopped.")
         else:
             await self.highrise.send_whisper(user.id, "You do not have an emote loop running.")

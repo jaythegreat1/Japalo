@@ -344,7 +344,7 @@ class HighriseRoomBot(
             await self.highrise.send_whisper(user.id, cooldown_text)
             return
 
-        if command in STOP_COMMANDS:
+        if command.rstrip(".!?,") in STOP_COMMANDS:  # "stop!", "Stop." count too
             if self._ai_stop_following_for(user):
                 await self.highrise.send_whisper(user.id, "Stopped following you.")
             await self._stop_emote(user)
