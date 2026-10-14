@@ -226,11 +226,14 @@ class Brain:
         status = last_exc.status if isinstance(last_exc, BrainError) else None
         raise BrainError(str(last_exc), status)
 
-    async def ask(self, user_id: str, username: str, text: str) -> str:
+    async def ask(self, user_id: str, username: str, text: str, extra_system: str = "") -> str:
         """Answer a user, remembering the conversation with them."""
         history = self.history[user_id]
         user_msg = {"role": "user", "content": f"{username}: {text}"}
-        messages = [self._system_message(), *history, user_msg]
+        system = self._system_message()
+        if extra_system:
+            system = {"role": "system", "content": f"{system['content']}\n\n{extra_system}"}
+        messages = [system, *history, user_msg]
         answer = await self.complete(messages)
         history.append(user_msg)
         history.append({"role": "assistant", "content": answer})

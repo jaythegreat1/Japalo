@@ -10,7 +10,19 @@ Highrise room  <->  Japalo bot (Python)  <->  OmniRoute :20128/v1  <->  OpenAI /
 
 ## What it does
 
-- **Talks:** say its name in chat (`Japalo what's up?`) and it answers with `@you`; whisper it and it whispers back.
+- **Only answers when a message starts with its name:** `Japalo what's up?` gets an answer, while
+  `hey japalo` or `I like Japalo` is ignored. Whispers to the bot don't need the name.
+- **Acts in the room:** the AI controls the bot's avatar. `Japalo come dance with me` makes the bot and you
+  dance; `Japalo wave at me and come over here` sends a wave and walks over. Every action the AI asks for
+  is checked against the allowed list and your permissions before it runs.
+- **Fast commands (no AI needed):**
+  - `65` on its own: you do emote number 65 (classic emote-bot shortcut)
+  - `Japalo i want to do the emote number 65`, `Japalo emote 65`, `Japalo emote macarena`
+  - `Japalo follow me` / `Japalo stop` (the bot walks after you until told to stop, or you leave)
+  - `Japalo come here`, `Japalo send heart to amy`, `Japalo emotes` (numbered list)
+  - Owners can target others: `Japalo make amy do 7`, `Japalo follow amy`, emotes for `all`
+- **Your own emote numbers:** `bot/emotes.json` is the numbered list (number = position). Reorder or replace
+  it to match your other bots' numbering, or point `BOT_EMOTES_FILE` at your own file.
 - **Remembers each person:** keeps the last few messages per user, so follow-up questions make sense (`!reset` clears it).
 - **Learns:** owners teach it facts with `!learn`; they are saved in `data/memory.json` and used in every answer.
 - **Stays up:** retries with backoff (but not on permanent errors like 401/403), falls back through
@@ -19,7 +31,7 @@ Highrise room  <->  Japalo bot (Python)  <->  OmniRoute :20128/v1  <->  OpenAI /
 
 | Command | Who | |
 | --- | --- | --- |
-| `!help` `!ping` `!status` `!reset` `!facts` | everyone | `!status` shows model, answer count, failures, latency |
+| `Japalo help` / `status` / `reset` / `facts` / `emotes` (or `!help` ...) | everyone | `!status` shows model, answer count, failures, latency |
 | `!model [name]` `!models` | owners | show or switch the OmniRoute model live |
 | `!learn <fact>` `!forget <n>` | owners | teach or remove a fact |
 

@@ -40,6 +40,7 @@ class Config:
     request_timeout: float = 45.0
     max_history: int = 12
     data_dir: Path = Path("data")
+    emotes_file: Path = Path(__file__).with_name("emotes.json")
     system_prompt: str = (
         "You are {name}, a friendly, witty AI living in a Highrise room. "
         "Keep answers short (1-3 sentences) because chat bubbles are small. "
@@ -67,6 +68,7 @@ class Config:
         cfg.request_timeout = float(os.environ.get("OMNIROUTE_TIMEOUT", cfg.request_timeout))
         cfg.max_history = int(os.environ.get("BOT_MAX_HISTORY", cfg.max_history))
         cfg.data_dir = Path(os.environ.get("BOT_DATA_DIR", str(cfg.data_dir)))
+        cfg.emotes_file = Path(os.environ.get("BOT_EMOTES_FILE", str(cfg.emotes_file)))
         if os.environ.get("BOT_SYSTEM_PROMPT"):
             cfg.system_prompt = os.environ["BOT_SYSTEM_PROMPT"]
         return cfg
