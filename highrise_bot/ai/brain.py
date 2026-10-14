@@ -1,7 +1,9 @@
-"""Japalo's AI brain: talks to OmniRoute's OpenAI-compatible API.
+"""Japalo's AI brain: OpenAI-compatible chat APIs tried in order (Groq, then OmniRoute).
 
-Keeps a short conversation history per user, plus a list of facts the owner
-taught the bot (saved to disk so the bot keeps "learning" across restarts).
+Each "route" is one provider + model. A question goes to the first route that is
+not resting or cooling down; if it fails, the next route gets it. Keeps a short
+conversation history per user, plus a list of facts the owner taught the bot
+(saved to disk so the bot keeps "learning" across restarts).
 """
 
 from __future__ import annotations
@@ -11,6 +13,7 @@ import json
 import logging
 import time
 from collections import defaultdict, deque
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import aiohttp
@@ -19,13 +22,14 @@ log = logging.getLogger(__name__)
 
 
 class BrainError(Exception):
-    """OmniRoute could not produce an answer."""
+    """No route could produce an answer."""
 
     resting = False
 
-    def __init__(self, message: str, status: int | None = None):
+    def __init__(self, message: str, status: int | None = None, retry_after: float | None = None):
         super().__init__(message)
         self.status = status
+        self.retry_after = retry_after
 
     @property
     def permanent(self) -> bool:
@@ -74,10 +78,26 @@ class Memory:
         return None
 
 
+@dataclass
+class Route:
+    """One provider + model to ask, e.g. Groq's openai/gpt-oss-120b."""
+
+    provider: str
+    base_url: str
+    model: str
+    api_key: str = ""
+    min_interval: float = 4.0  # seconds between requests to this provider
+    extra: dict = field(default_factory=dict)  # provider-specific request fields
+
+    @property
+    def label(self) -> str:
+        return f"{self.provider}:{self.model}"
+
+
 class Brain:
     def __init__(
         self,
-        base_url: str,
+        base_url: str = "",
         api_key: str = "",
         model: str = "auto",
         system_prompt: str = "",
@@ -89,27 +109,42 @@ class Brain:
         min_interval: float = 4.0,
         rate_limit_wait: float = 15.0,
         skip_after_failure: float = 600.0,
+        routes: list[Route] | None = None,
     ):
-        self.base_url = base_url.rstrip("/")
-        self.api_key = api_key
-        self.model = model
+        if routes is None:  # single provider: model + fallback models on one base URL
+            names = [model] + [m for m in (fallback_models or []) if m and m != model]
+            routes = [
+                Route("omniroute", base_url.rstrip("/"), name, api_key, min_interval)
+                for name in names
+            ]
+        if not routes:
+            raise ValueError("Brain needs at least one route")
+        self.routes = routes
         self.system_prompt = system_prompt
         self.max_history = max_history
         self.timeout = timeout
         self.retries = retries
         self.memory = memory
-        self.fallback_models = [m for m in (fallback_models or []) if m]
-        # Free providers (e.g. DuckDuckGo) answer steady traffic but rate-limit bursts,
-        # so requests are spaced at least `min_interval` seconds apart.
-        self.min_interval = min_interval
         self.rate_limit_wait = rate_limit_wait
         self.skip_after_failure = skip_after_failure
-        self._pace_lock = asyncio.Lock()
-        self._last_call = 0.0
-        self._skip_until: dict[str, float] = {}
+        # Free tiers rate-limit bursts, so each provider's requests are spaced
+        # at least its route's min_interval apart.
+        self._pace_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+        self._last_call: dict[str, float] = defaultdict(float)
+        self._skip_until: dict[str, float] = {}  # permanent failure: rest the route
+        self._cool_until: dict[str, float] = {}  # rate limited: cool down the route
         self.history: dict[str, deque[dict]] = defaultdict(lambda: deque(maxlen=max_history))
         self.stats = {"ok": 0, "failed": 0, "last_error": "", "last_latency": 0.0, "last_model": ""}
         self._session: aiohttp.ClientSession | None = None
+
+    @property
+    def model(self) -> str:
+        """The first (preferred) route's model."""
+        return self.routes[0].model
+
+    @model.setter
+    def model(self, value: str) -> None:
+        self.routes[0].model = value
 
     async def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
@@ -122,10 +157,11 @@ class Brain:
         if self._session and not self._session.closed:
             await self._session.close()
 
-    def _headers(self) -> dict[str, str]:
+    @staticmethod
+    def _headers(route: Route) -> dict[str, str]:
         headers = {"Content-Type": "application/json"}
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
+        if route.api_key:
+            headers["Authorization"] = f"Bearer {route.api_key}"
         return headers
 
     def _system_message(self) -> dict:
@@ -138,78 +174,98 @@ class Brain:
     def reset(self, user_id: str) -> None:
         self.history.pop(user_id, None)
 
-    async def _post(self, path: str, payload: dict) -> dict:
+    async def _post(self, route: Route, payload: dict) -> dict:
         session = await self._get_session()
         async with session.post(
-            f"{self.base_url}{path}", json=payload, headers=self._headers()
+            f"{route.base_url}/chat/completions", json=payload, headers=self._headers(route)
         ) as resp:
             body = await resp.text()
             if resp.status >= 400:
-                raise BrainError(f"HTTP {resp.status}: {body[:200]}", resp.status)
+                retry_after = None
+                try:
+                    retry_after = float(resp.headers.get("retry-after", ""))
+                except ValueError:
+                    pass
+                raise BrainError(f"HTTP {resp.status}: {body[:200]}", resp.status, retry_after)
             try:
                 return json.loads(body)
             except ValueError as exc:
-                raise BrainError(f"Bad JSON from OmniRoute: {body[:200]}") from exc
+                raise BrainError(f"Bad JSON from {route.provider}: {body[:200]}") from exc
 
-    async def _pace(self, model: str, may_skip: bool) -> None:
-        """Wait until at least `min_interval` has passed since the previous request.
+    async def _pace(self, route: Route, may_skip: bool) -> None:
+        """Wait until the route's provider allows another request.
 
-        If `model` started resting while this request waited in line, give up the
-        turn instead of spending it on a model that is known to be dead.
+        If the route started resting while this request waited in line, give up
+        the turn instead of spending it on a route that is known to be dead.
         """
-        async with self._pace_lock:
-            if may_skip and model in self.skipped_models():
-                exc = BrainError(f"{model} is resting after a permanent failure")
+        async with self._pace_locks[route.provider]:
+            if may_skip and route.label in self.skipped_models():
+                exc = BrainError(f"{route.label} is resting after a permanent failure")
                 exc.resting = True
                 raise exc
-            wait = self.min_interval - (time.monotonic() - self._last_call)
+            wait = route.min_interval - (time.monotonic() - self._last_call[route.provider])
             if wait > 0:
                 await asyncio.sleep(wait)
-            self._last_call = time.monotonic()
+            self._last_call[route.provider] = time.monotonic()
 
     def skipped_models(self) -> list[str]:
+        """Routes resting after a permanent failure (bad key, blocked, unknown model)."""
         now = time.monotonic()
-        return [m for m, until in self._skip_until.items() if until > now]
+        return [label for label, until in self._skip_until.items() if until > now]
+
+    def cooling_models(self) -> list[str]:
+        """Routes cooling down after a rate limit."""
+        now = time.monotonic()
+        return [label for label, until in self._cool_until.items() if until > now]
 
     async def complete(self, messages: list[dict], model: str | None = None) -> str:
-        """Ask the main model, then each fallback model in turn, until one answers.
+        """Ask each route in order until one answers.
 
-        A model that fails permanently (blocked, bad key, unknown model) is skipped
-        for `skip_after_failure` seconds so every message doesn't pay for it again.
+        A route that fails permanently rests for `skip_after_failure` seconds and
+        a rate-limited one cools down for the provider's Retry-After, so every
+        message doesn't pay for them again. If every route is resting or cooling,
+        all of them are tried anyway.
         """
-        chain = [model or self.model]
-        chain += [m for m in self.fallback_models if m not in chain]
-        skipped = set(self.skipped_models())
-        live = [m for m in chain if m not in skipped] or chain
+        routes = list(self.routes)
+        if model:  # explicit model: ask it first, on the first route's provider
+            first = routes[0]
+            routes.insert(0, Route(first.provider, first.base_url, model, first.api_key,
+                                   first.min_interval, dict(first.extra)))
+        unavailable = set(self.skipped_models()) | set(self.cooling_models())
+        live = [r for r in routes if r.label not in unavailable] or routes
         errors = []
-        for i, name in enumerate(live):
+        for i, route in enumerate(live):
             try:
-                answer = await self._complete_one(messages, name, may_skip=i < len(live) - 1)
-                self.stats["last_model"] = name
-                self._skip_until.pop(name, None)
+                answer = await self._complete_one(messages, route, may_skip=i < len(live) - 1)
+                self.stats["last_model"] = route.label
+                self._skip_until.pop(route.label, None)
                 return answer
             except BrainError as exc:
                 if exc.resting:
                     continue
-                errors.append(f"{name}: {exc}")
+                errors.append(f"{route.label}: {exc}")
                 if exc.permanent and len(live) > 1:
-                    self._skip_until[name] = time.monotonic() + self.skip_after_failure
+                    self._skip_until[route.label] = time.monotonic() + self.skip_after_failure
         self.stats["failed"] += 1
         self.stats["last_error"] = " | ".join(errors)
         raise BrainError(self.stats["last_error"])
 
-    async def _complete_one(self, messages: list[dict], model: str, may_skip: bool = False) -> str:
-        """One model, with retries and exponential backoff."""
-        payload = {"model": model, "messages": messages, "stream": False}
+    async def _complete_one(self, messages: list[dict], route: Route, may_skip: bool = False) -> str:
+        """One route, with retries and backoff.
+
+        A rate limit (429) with other routes still to try cools this route down
+        and moves on at once; on the last route it waits and retries instead.
+        """
         last_exc: Exception | None = None
         for attempt in range(self.retries + 1):
+            payload = {"model": route.model, "messages": messages, "stream": False, **route.extra}
             try:
-                await self._pace(model, may_skip)
+                await self._pace(route, may_skip)
                 started = time.monotonic()
-                data = await self._post("/chat/completions", payload)
+                data = await self._post(route, payload)
                 text = (data["choices"][0]["message"].get("content") or "").strip()
                 if not text:
-                    raise BrainError("Empty answer from OmniRoute")
+                    raise BrainError(f"Empty answer from {route.label}")
                 self.stats["ok"] += 1
                 self.stats["last_latency"] = time.monotonic() - started
                 return text
@@ -217,12 +273,25 @@ class Brain:
                 if isinstance(exc, BrainError) and exc.resting:
                     raise
                 last_exc = exc
-                log.warning("OmniRoute %s attempt %d failed: %s", model, attempt + 1, exc)
+                log.warning("AI %s attempt %d failed: %s", route.label, attempt + 1, exc)
+                if isinstance(exc, BrainError) and exc.status == 400 and route.extra:
+                    # The provider rejected an optional field: drop them and retry.
+                    log.warning("AI %s: dropping optional fields %s", route.label, list(route.extra))
+                    route.extra = {}
+                    continue
                 if isinstance(exc, BrainError) and exc.permanent:
                     raise exc
+                rate_limited = isinstance(exc, BrainError) and exc.status == 429
+                if rate_limited:
+                    wait = exc.retry_after or self.rate_limit_wait
+                    self._cool_until[route.label] = time.monotonic() + wait
+                    if may_skip:
+                        raise exc  # let the next route answer now
                 if attempt < self.retries:
-                    rate_limited = isinstance(exc, BrainError) and exc.status == 429
-                    await asyncio.sleep(self.rate_limit_wait * (attempt + 1) if rate_limited else 2**attempt)
+                    if rate_limited:
+                        await asyncio.sleep((exc.retry_after or self.rate_limit_wait) * (attempt + 1))
+                    else:
+                        await asyncio.sleep(2**attempt)
         status = last_exc.status if isinstance(last_exc, BrainError) else None
         raise BrainError(str(last_exc), status)
 
@@ -240,8 +309,10 @@ class Brain:
         return answer
 
     async def list_models(self) -> list[str]:
+        """Models offered by the first route's provider."""
+        route = self.routes[0]
         session = await self._get_session()
-        async with session.get(f"{self.base_url}/models", headers=self._headers()) as resp:
+        async with session.get(f"{route.base_url}/models", headers=self._headers(route)) as resp:
             if resp.status >= 400:
                 raise BrainError(f"HTTP {resp.status}")
             data = await resp.json(content_type=None)

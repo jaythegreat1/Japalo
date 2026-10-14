@@ -87,35 +87,65 @@ planned action goes through the same checks as the typed commands
 needs staff). `!config set ai off` turns off AI chat but keeps the typed
 actions. Code: `highrise_bot/ai/` and `highrise_bot/commands/ai_commands.py`.
 
-### AI setup (OmniRoute)
+### AI setup (Groq first, OmniRoute as fallback)
 
-The AI's brain is [OmniRoute](https://github.com/diegosouzapw/OmniRoute), a
-free AI gateway with one OpenAI-style endpoint for many providers. Run it on
-the same machine as the bot (Node **22.22.2+** or 24; on older Node, npm
-silently installs an outdated 3.8.48 whose free providers are gone):
+The AI tries its providers in order and moves to the next one when one fails
+or is rate-limited:
 
-```
-npm install -g omniroute
-omniroute          # dashboard + API on http://localhost:20128
-```
+1. **Groq** (when `GROQ_API_KEY` is set) — free key from
+   [console.groq.com/keys](https://console.groq.com/keys). Default models
+   `openai/gpt-oss-120b` then `openai/gpt-oss-20b` (Groq shut Llama 3.x off for
+   free keys on 2026-08-16). Free limits are per model: 30 requests and 8K
+   tokens a minute, 1K requests a day — roughly 4 AI answers a minute per
+   model.
+2. **OmniRoute** (when `OMNIROUTE_URL` is set, or when there's no Groq key) —
+   [OmniRoute](https://github.com/diegosouzapw/OmniRoute) is a free AI gateway
+   you run yourself (Node **22.22.2+**: `npm install -g omniroute`, then
+   `omniroute`). Its free keyless DuckDuckGo models work as a fallback:
+   `OMNIROUTE_MODEL=ddgw/gpt-5.4-mini`,
+   `OMNIROUTE_FALLBACK_MODELS=ddgw/gpt-5.6-luna,ddgw/gpt-5-mini`. It's too big
+   for Railway's free plan, so run it on a machine of your own if you want it.
 
-Optional secrets (all have defaults):
-
-| Key | Default | What it does |
+| Variable | Default | What it does |
 |---|---|---|
-| `OMNIROUTE_URL` | `http://localhost:20128/v1` | Where OmniRoute listens |
+| `GROQ_API_KEY` | *(empty)* | Turns on Groq as the first provider |
+| `GROQ_MODELS` | `openai/gpt-oss-120b,openai/gpt-oss-20b` | Groq models, in order |
+| `GROQ_REASONING_EFFORT` | `low` | How long gpt-oss thinks before answering (fewer tokens = more answers per minute) |
+| `GROQ_MIN_INTERVAL` | `2` | Seconds between Groq requests |
+| `OMNIROUTE_URL` | *(off when Groq is set)* | OmniRoute fallback, e.g. `http://your-host:20128/v1` |
 | `OMNIROUTE_API_KEY` | *(empty)* | OmniRoute key, if you turned on required API keys |
-| `OMNIROUTE_MODEL` | `auto` | Main model |
-| `OMNIROUTE_FALLBACK_MODELS` | *(empty)* | Models tried in order when the main one fails, e.g. `ddgw/gpt-5.4-mini,ddgw/gpt-5.6-luna,ddgw/gpt-5-mini` for free keyless DuckDuckGo |
-| `OMNIROUTE_MIN_INTERVAL` | `4` | Seconds between AI requests (free providers rate-limit bursts) |
-| `OMNIROUTE_RATE_LIMIT_WAIT` | `15` | Seconds to wait after a rate limit before retrying |
+| `OMNIROUTE_MODEL` / `OMNIROUTE_FALLBACK_MODELS` | `auto` / *(empty)* | OmniRoute models, in order |
+| `OMNIROUTE_MIN_INTERVAL` | `4` | Seconds between OmniRoute requests |
 | `BOT_NAME` | `Japalo` | The word a message must start with |
 
-Zero-key `auto` cannot answer today (its only keyless target, OpenCode Free,
-blocks third-party apps), so set fallback models or connect a provider with
-your own free key (Groq, Google AI Studio, OpenRouter) in the OmniRoute
-dashboard. If OmniRoute is down, the bot keeps running and replies that its
+A rate-limited model cools down for as long as the provider asks and the next
+one answers right away; a model that fails permanently (bad key, model gone)
+rests for 10 minutes. `Japalo status` shows the route order and anything
+resting. If every provider is down the bot keeps running and replies that its
 brain is taking a nap; everything else works as before.
+
+## Run it 24/7 on Railway (free plan)
+
+Railway's Free plan is $0 with $1 of usage credit a month (after a 30-day,
+$5 trial). The bot runs as one small process (about 45-60 MB), which costs
+roughly $0.50-0.80 a month in memory and CPU, so it should fit the credit;
+check **Usage** in Railway after a few days. The repo's `Dockerfile` and
+`railway.json` set everything up; Railway restarts the bot if it crashes.
+
+1. Sign in at [railway.com](https://railway.com) with GitHub.
+2. **New Project → Deploy from GitHub repo**, pick this repository, and in the
+   service's **Settings → Source** choose the branch to deploy.
+3. In the service's **Variables**, add `HIGHRISE_ROOM_ID`, `HIGHRISE_BOT_TOKEN`
+   and `GROQ_API_KEY` (plus any optional variables above).
+4. Keep points, warnings, favorites, settings and learned facts across
+   redeploys: right-click the service → **Attach volume**, mount path
+   `/app/data`. Without a volume they reset on every redeploy.
+5. Deploy. The **Deploy Logs** show `Bot started in room owned by ...` once
+   it's in the room.
+
+`main.py` (keep-alive web server + restart loop) is still what Replit runs; on
+Railway the Dockerfile runs the bot directly instead, because the keep-alive
+server isn't needed there and would cost extra memory.
 
 ## Persistence, settings, and alerts (Phase 0)
 
@@ -219,6 +249,10 @@ activity. Milestone visits are announced at 10, 25, 50, and 100.
 - `!surprise [rarity]` — choose and perform a random emote
 - `!fav`, `!fav <slot>`, `!fav <slot> <number>` — list, play, or save favorites
 - `stop` — stop your own emote loop
+- `!punch @name` / `!slap @name` — you punch or slap, they play a random
+  falling emote (Fall, Collapse, Faint Drop, Clumsy, Fail)
+- `!explode @name` — they play Boo (you don't emote)
+- `Japalo <anything>` — talk to the AI; see "Talk to Japalo (AI)" above
 - `!games` — list the minigames and how to answer each
 - `!answer <text>` — answer whichever game is currently active
 - `!score` / `!leaderboard [daily|weekly|all]`

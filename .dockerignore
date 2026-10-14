@@ -1,0 +1,19 @@
+# Only highrise_bot/, config/ and requirements.txt go into the image.
+.git
+.agents
+.conversation
+.local
+.cache
+artifacts
+attached_assets
+lib
+scripts
+tools
+tests
+node_modules
+data
+**/__pycache__
+**/*.pyc
+*.md
+.env
+.env.*

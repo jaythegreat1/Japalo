@@ -68,15 +68,11 @@ class AICommandsMixin:
         self.ai_config = config or AIConfig.from_env()
         cfg = self.ai_config
         self.brain = brain or Brain(
-            base_url=cfg.omniroute_url,
-            api_key=cfg.omniroute_key,
-            model=cfg.model,
+            routes=cfg.routes(),
             system_prompt=SYSTEM_PROMPT.format(name=cfg.bot_name),
             max_history=cfg.max_history,
             timeout=cfg.timeout,
             memory=Memory(cfg.memory_path),
-            fallback_models=cfg.fallback_models,
-            min_interval=cfg.min_interval,
             rate_limit_wait=cfg.rate_limit_wait,
         )
         name = re.escape(cfg.bot_name)
@@ -369,11 +365,12 @@ class AICommandsMixin:
             return
         if name == "status":
             stats = self.brain.stats
-            resting = self.brain.skipped_models()
+            resting = self.brain.skipped_models() + self.brain.cooling_models()
             following = self._ai_users.get(self._ai_following or "")
             await self.highrise.send_whisper(
                 user.id,
-                f"AI {'on' if self._ai_enabled() else 'off'} | model {self.brain.model} "
+                f"AI {'on' if self._ai_enabled() else 'off'} | "
+                f"routes {' > '.join(r.label for r in self.brain.routes)} "
                 f"(last answer: {stats['last_model'] or '-'}) | {stats['ok']} answers, "
                 f"{stats['failed']} failed | following: {following.username if following else '-'}"
                 + (f" | resting: {', '.join(resting)}" if resting else ""),
