@@ -270,6 +270,9 @@ activity. Milestone visits are announced at 10, 25, 50, and 100.
 - `<number>` — loop that emote on yourself until you type `stop` (or, if a
   Guess the Number round is active, submit that number as a guess instead)
 - `!emote <number>` — same as typing the number directly
+- `!emote <name>` — loop an emote by its `!emotelist` name, e.g. `!emote moonwalk`
+  or `!emote lets go shopping` (case and punctuation don't matter; a unique part
+  of a name works too, and an unclear one lists the matches); `stop` ends it
 - `!surprise [rarity]` — choose and perform a random emote
 - `!fav`, `!fav <slot>`, `!fav <slot> <number>` — list, play, or save favorites
 - `stop` — stop your own emote loop
@@ -303,7 +306,7 @@ activity. Milestone visits are announced at 10, 25, 50, and 100.
 - `!config` / `!config set <key> <value>` — view/change tunable settings (see Phase 0 section above)
 
 **Staff and VIP:**
-- `!emote @name <number>` — make another room user perform an emote. Staff can
+- `!emote @name <number or name>` — make another room user perform an emote. Staff can
   use it immediately; a user becomes VIP after tipping the bot 100g.
 
 ### Why `!mute` needs a duration, and there's no `!unmute`

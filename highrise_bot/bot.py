@@ -352,10 +352,9 @@ class HighriseRoomBot(
         try:
             tokens = shlex.split(text)
         except ValueError:
-            await self.highrise.send_whisper(
-                user.id, "I could not read that command. Check your quotes."
-            )
-            return
+            # An apostrophe ("!emote let's go shopping", "!warn @x don't spam")
+            # isn't a broken quote, so fall back to splitting on spaces.
+            tokens = text.split()
 
         command = tokens[0].casefold()
         args = tokens[1:]

@@ -38,11 +38,16 @@ class EmoteCommandsMixin:
             await self.highrise.send_whisper(user.id, prefix + page)
 
     async def _handle_emote_command(self, user: User, args: list[str]) -> None:
+        """!emote <number or name> loops it on you; !emote @name <number or name> on them.
+
+        Names match the !emotelist names ignoring case and punctuation
+        ("!emote lets go shopping"); a unique part of a name works too.
+        """
         target = user
         if args and args[0].startswith("@"):
-            if len(args) < 2 or not args[1].isdigit():
+            if len(args) < 2:
                 await self.highrise.send_whisper(
-                    user.id, "Use !emote @PlayerName <number>."
+                    user.id, "Use !emote @PlayerName <number or name>."
                 )
                 return
             target = await self._find_room_user(args[0])
@@ -55,12 +60,34 @@ class EmoteCommandsMixin:
                 )
                 return
             args = args[1:]
-        if not args or not args[0].isdigit():
+        if not args:
             await self.highrise.send_whisper(
-                user.id, "Use !emote <number>. See the exact numbered list with !emotelist."
+                user.id,
+                "Use !emote <number or name>, e.g. !emote 65 or !emote moonwalk. "
+                "See the list with !emotelist.",
             )
             return
-        await self._run_emote_number(user, int(args[0]), target=target)
+        ref = " ".join(args)
+        if ref.lstrip("#").isdigit():  # numbers work exactly as before
+            await self._run_emote_number(user, int(ref.lstrip("#")), target=target)
+            return
+        found = self.catalog.find(ref)
+        if found is None:
+            matches = self.catalog.filter(query=ref)
+            if len(matches) > 1:
+                shown = ", ".join(f"{number}. {emote.name}" for number, emote in matches[:8])
+                more = f" (+{len(matches) - 8} more)" if len(matches) > 8 else ""
+                await self.highrise.send_whisper(
+                    user.id,
+                    f"'{ref}' matches several emotes: {shown}{more}. Use the number or full name.",
+                )
+            else:
+                await self.highrise.send_whisper(
+                    user.id,
+                    f"No emote called '{ref}'. Search with !findemote or see !emotelist.",
+                )
+            return
+        await self._run_emote_number(user, found[0], target=target)
 
     async def _run_emote_number(
         self, user: User, number: int, target: User | None = None

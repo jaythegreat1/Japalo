@@ -23,7 +23,8 @@ HELP_CATEGORIES: dict[str, tuple[str, bool, list[str]]] = {
             "!fav <slot> <number> — save an emote to that slot",
             "!fav remove <slot> — clear a favorite slot",
             "stop — stop your current emote loop",
-            "!emote @name <number> — play an emote on someone else "
+            "!emote <name> — loop an emote by name, e.g. !emote moonwalk (stop to end)",
+            "!emote @name <number or name> — play an emote on someone else "
             "(VIP tippers at 100g+ lifetime, or staff)",
             "!punch @name — you punch, they fall",
             "!slap @name — you slap, they fall",
